@@ -9,7 +9,7 @@ from . import creating_dataset
 from abcidatasets import Dataset, DatasetVariable
 from abcidatasets.dataset.utils import make_acausal_kernel
 
-DATA_PATH = "/Users/federicoclaudi/Downloads/dataset_v2_blocks"
+DATA_PATH = "./dataset_v2_blocks"
 n_inputs, n_outputs = 8, 20
 
 
