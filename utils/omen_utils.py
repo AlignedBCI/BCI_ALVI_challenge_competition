@@ -15,7 +15,7 @@ n_inputs, n_outputs = 8, 20
 
 
 def emg_amplitude(x):
-    kernel = make_acausal_kernel(5)
+    kernel = make_acausal_kernel(9)
     amp = np.zeros_like(x)
 
     for i in range(x.shape[0]):
@@ -36,12 +36,11 @@ def reshape_and_average(x, n):
 def ds_to_session(name, myo_session_data, omen_ds, train_config, dt, variables):
     logger.debug(f"Creating session {name}")
     train_Xs = np.concatenate([
-        # reshape_and_average(emg_amplitude(x), train_config.down_sample_target) 
-        x[:, ::train_config.down_sample_target]
+        reshape_and_average(emg_amplitude(x), train_config.down_sample_target) 
+        # x[:, ::train_config.down_sample_target]
         for x, _ in myo_session_data
     ], axis=1)
     train_Ys = np.concatenate([y for _, y in myo_session_data], axis=1)
-    print(train_Xs.shape, train_Ys.shape)
 
     data = {}
     for i in range(n_inputs):

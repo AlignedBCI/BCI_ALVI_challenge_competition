@@ -7,6 +7,10 @@ logger.add(sys.stderr, level=1);
 import yaml
 
 from utils.omen_utils import load_data_into_omen_dataset
+
+import omen
+omen.hyperparameters.sweep.N_ITERATIONS = 2
+
 from omen.hyperparameters.sweep import Sweeper
 
 
