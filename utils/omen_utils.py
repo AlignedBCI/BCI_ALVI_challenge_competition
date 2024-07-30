@@ -1,6 +1,7 @@
 import numpy as np
 from dataclasses import replace
 import pandas as pd
+from loguru import logger
 
 from .creating_dataset import init_dataset
 from .augmentations import get_default_transform
@@ -33,6 +34,7 @@ def reshape_and_average(x, n):
     
 
 def ds_to_session(name, myo_session_data, omen_ds, train_config, dt, variables):
+    logger.debug(f"Creating session {name}")
     train_Xs = np.concatenate([
         # reshape_and_average(emg_amplitude(x), train_config.down_sample_target) 
         x[:, ::train_config.down_sample_target]
@@ -82,7 +84,7 @@ def load_data_into_omen_dataset(n_sessions:int=-1):
     train_config = replace(data_config, samples_per_epoch=int(data_config.samples_per_epoch / len(train_paths)))               
     val_config = replace(data_config, random_sampling=False, samples_per_epoch=None)
 
-    print(f"Found {len(train_paths)} training paths and {len(val_paths)} validation paths")
+    logger.debug(f"Found {len(train_paths)} training paths and {len(val_paths)} validation paths")
 
     dt = int(1000/200) * train_config.down_sample_target
     variables = [DatasetVariable(f'target_{i}', 'hand', False) for i in range(n_outputs)]
@@ -95,7 +97,7 @@ def load_data_into_omen_dataset(n_sessions:int=-1):
         name = path.parent.parent.name
         ds = init_dataset(train_config, path, transform=transform)
         sess = ds_to_session(name, ds, omen_ds, train_config, dt, variables)
-        print(f"Added session {name} with {sess.n_train_trials} trials")
+        logger.debug(f"Added session {name} with {sess.n_train_trials} trials")
         
 
     return omen_ds
