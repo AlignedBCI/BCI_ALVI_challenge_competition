@@ -33,14 +33,15 @@ def reshape_and_average(x, n):
     return x.reshape(n_inputs, -1, n).mean(axis=2)
     
 
-def ds_to_session(name, myo_session_data, omen_ds, train_config, dt, variables):
+def ds_to_session(name, myo_session_data, omen_ds, train_config, dt, variables, downsample_movements_factor):
     logger.debug(f"Creating session {name}")
+    movements = [xy for xy in myo_session_data][::downsample_movements_factor]
     train_Xs = np.concatenate([
         reshape_and_average(emg_amplitude(x), train_config.down_sample_target) 
         # x[:, ::train_config.down_sample_target]
-        for x, _ in myo_session_data
+        for x, _ in movements
     ], axis=1)
-    train_Ys = np.concatenate([y for _, y in myo_session_data], axis=1)
+    train_Ys = np.concatenate([y for _, y in movements], axis=1)
 
     data = {}
     for i in range(n_inputs):
@@ -60,7 +61,7 @@ def ds_to_session(name, myo_session_data, omen_ds, train_config, dt, variables):
     return sess
 
 
-def load_data_into_omen_dataset(n_sessions:int=-1):
+def load_data_into_omen_dataset(n_sessions:int=-1, downsample_movements_factor:int=1):
 
     data_paths = dict(
         datasets=[DATA_PATH],
@@ -95,8 +96,8 @@ def load_data_into_omen_dataset(n_sessions:int=-1):
             break
         name = path.parent.parent.name
         ds = init_dataset(train_config, path, transform=transform)
-        sess = ds_to_session(name, ds, omen_ds, train_config, dt, variables)
-        logger.debug(f"Added session {name} with {sess.n_train_trials} trials")
+        sess = ds_to_session(name, ds, omen_ds, train_config, dt, variables, downsample_movements_factor)
+        logger.debug(f"Added session {name} with {sess.n_train_trials} trials and {sess.X_train.shape[0]} samples ({sess.X_train.shape[0]/25:.2f} seconds)")
         
 
     return omen_ds
