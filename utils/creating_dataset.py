@@ -146,6 +146,7 @@ def get_datasets(config: DataConfig, transform=None, only_test=False):
                                    config=val_config,
                                    transform=None)
         val_datasets.append(val_dataset)
+        break
     val_dataset = torch.utils.data.ConcatDataset(val_datasets)
     
     
@@ -162,6 +163,7 @@ def get_datasets(config: DataConfig, transform=None, only_test=False):
             print('WWWWW: Problem with dataset', train_folder)
             break
         train_datasets.append(train_dataset)
+        break
     train_dataset = torch.utils.data.ConcatDataset(train_datasets)
 
     print(f"Number of trainining sessions: {len(train_dataset.datasets)}")
