@@ -26,12 +26,12 @@ sweeper = Sweeper(
             omen_ds,
             'best_hps.yaml',
             '',
-            num_cpus=12,
-            num_gpus=1,
-            n_sessions=2,
+            num_cpus=48,
+            num_gpus=4,
+            n_sessions=1,
             verbose=True,
-            num_gpus_per_job=0.2,
-            num_cpus_per_job=3,
+            num_gpus_per_job=0.5,
+            num_cpus_per_job=6,
             multi_session=False,
         )
 best_hps = sweeper.sweep()

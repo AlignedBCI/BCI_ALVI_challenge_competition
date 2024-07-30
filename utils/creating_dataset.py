@@ -95,7 +95,7 @@ def init_dataset(config: DataConfig, data_folder: Path, transform = None):
     all_paths = natsorted(all_paths)
     print(f'Number of moves: {len(all_paths)} | Dataset: {data_folder.parents[1].name}')
 
-    exps_data = [dict(np.load(d)) for d in all_paths]
+    exps_data = [dict(np.load(d, allow_pickle=True)) for d in all_paths]
 
     # temporal alighnment
     n_crop_idxs = int(config.delay_ms/1000*config.original_fps)
