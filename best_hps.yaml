@@ -1,0 +1,12 @@
+activation: tanh
+beta: 0.21919
+embedding_dim: 64
+head_n_layers: 2
+input_sigma: 0.1
+kernel_size: 25
+lr: 0.02
+n_epochs: 3000
+n_hidden: 128
+n_kernels: 4
+n_layers: 5
+sigma: 0.6

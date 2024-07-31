@@ -1,10 +1,12 @@
 models/*
 dataset_v2_blocks/*
 
+*.png
 *.gif
 *.mp4
 *.csv
 tutorials/logs/*
+plots/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

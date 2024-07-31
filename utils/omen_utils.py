@@ -61,7 +61,7 @@ def ds_to_session(name, myo_session_data, omen_ds, train_config, dt, variables, 
     return sess
 
 
-def load_data_into_omen_dataset(n_sessions:int=-1, downsample_movements_factor:int=1):
+def load_data_into_omen_dataset(n_sessions:int=-1, downsample_movements_factor:int=1, collate_sessions:bool=False):
 
     data_paths = dict(
         datasets=[DATA_PATH],
@@ -70,10 +70,6 @@ def load_data_into_omen_dataset(n_sessions:int=-1, downsample_movements_factor:i
         test_dataset_list = ['fedya_tropin_standart_elbow_left'],  # don't change this !
         random_sampling=False,
     )
-
-    # get transforms
-    p_transform = 0.1  # probability of applying the transform
-    transform = get_default_transform(p_transform)
 
     # define a config object to keep track of data variables
     data_config = creating_dataset.DataConfig(**data_paths)
@@ -88,16 +84,31 @@ def load_data_into_omen_dataset(n_sessions:int=-1, downsample_movements_factor:i
 
     dt = int(1000/200) * train_config.down_sample_target
     variables = [DatasetVariable(f'target_{i}', 'hand', False) for i in range(n_outputs)]
-    omen_ds =  Dataset('hand', '', -1, dt, 1, variables, [])
+    omen_ds_train =  Dataset('hand', '', -1, dt, 1, variables, [])
+    omen_ds_test =  Dataset('hand', '', -1, dt, 1, variables, [])
 
+    for omen_ds, paths in zip((omen_ds_train, omen_ds_test), (train_paths, val_paths)):
+        for i, path in enumerate(paths):
+            if n_sessions  > 0 and i >= n_sessions:
+                break
+            name = path.parent.parent.name
+            ds = init_dataset(train_config, path)
+            sess = ds_to_session(name, ds, omen_ds, train_config, dt, variables, downsample_movements_factor)
+            logger.debug(f"Added session {name} with {sess.n_train_trials} trials and {sess.X_train.shape[0]} samples ({sess.X_train.shape[0]/25:.2f} seconds)")
+            
+        if collate_sessions:
+            logger.debug(f"Collating {len(omen_ds.sessions)} sessions into a single session")
+            master_session = omen_ds.sessions[0]
+            for k, sess in enumerate(omen_ds.sessions):
+                if i == 0:
+                    continue
+                master_session.train_trials.extend(sess.train_trials)
+                master_session.test_trials.extend(sess.test_trials)
+                master_session.validation_trials.extend(sess.validation_trials)
 
-    for i, path in enumerate(train_paths):
-        if n_sessions  > 0 and i >= n_sessions:
-            break
-        name = path.parent.parent.name
-        ds = init_dataset(train_config, path, transform=transform)
-        sess = ds_to_session(name, ds, omen_ds, train_config, dt, variables, downsample_movements_factor)
-        logger.debug(f"Added session {name} with {sess.n_train_trials} trials and {sess.X_train.shape[0]} samples ({sess.X_train.shape[0]/25:.2f} seconds)")
-        
+            omen_ds.sessions = [master_session]
+            # print(master_session.describe())
 
-    return omen_ds
+    print(f"Training dataset has: {len(omen_ds_train.sessions)} sessions.")
+    print(f"Test dataset has: {len(omen_ds_test.sessions)} sessions.")
+    return omen_ds_train, omen_ds_test
