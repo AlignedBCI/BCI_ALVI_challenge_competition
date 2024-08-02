@@ -2,12 +2,16 @@ import numpy as np
 from dataclasses import replace
 import pandas as pd
 from loguru import logger
+from rich.progress import track
+from natsort import natsorted
+from pathlib import Path
 
 from .creating_dataset import init_dataset
-from .augmentations import get_default_transform
+# from .augmentations import get_default_transform
 from . import creating_dataset
+from .creating_dataset import LEFT_TO_RIGHT_HAND
 
-from abcidatasets import Dataset, DatasetVariable
+from abcidatasets import Dataset, DatasetVariable, DatasetSession
 from abcidatasets.dataset.utils import make_acausal_kernel
 
 DATA_PATH = "./dataset_v2_blocks"
@@ -60,22 +64,53 @@ def ds_to_session(name, myo_session_data, omen_ds, train_config, dt, variables, 
     omen_ds.sessions.append(sess)
     return sess
 
+def load_submission_dataset():
+    test_data_name = 'fedya_tropin_standart_elbow_left'  # shoould match `test_dataset_list` used to train the model
 
-def load_data_into_omen_dataset(n_sessions:int=-1, downsample_movements_factor:int=1, collate_sessions:bool=False):
+    dp = Path(DATA_PATH) / 'dataset_v2_blocks'
+    data_folder = dp / "amputant" / "left" / test_data_name / "preproc_angles" / "submit"
+    all_paths = natsorted(data_folder.glob('*.npz'))
+    
+    trials_data = []
+    for p in all_paths:
+        sample = np.load(p, allow_pickle=True)
+        myo = sample['data_myo'][:, LEFT_TO_RIGHT_HAND]
+        trials_data.append(myo)
 
-    data_paths = dict(
-        datasets=[DATA_PATH],
-        hand_type = ['left', 'right'], # [left, 'right']
-        human_type = ['health'], # 'amputant'], # [amputant, 'health']
-        test_dataset_list = ['fedya_tropin_standart_elbow_left'],  # don't change this !
-        random_sampling=False,
-    )
+    submit_gt = pd.read_csv(dp/'submit_gt.csv')
+    return trials_data, submit_gt
+
+
+
+def load_data_into_omen_dataset(
+        n_sessions:int=-1,
+        downsample_movements_factor:int=1,
+        load_test_only=False,
+        ):
+
+    if load_test_only:
+        data_paths = dict(
+            datasets=[DATA_PATH],
+            hand_type = ['left', 'right'], # [left, 'right']
+            human_type = ['amputant'], # [amputant, 'health']
+            test_dataset_list = ['fedya_tropin_standart_elbow_left'],  # don't change this !
+            random_sampling=False,
+        )
+    else:
+        data_paths = dict(
+            datasets=[DATA_PATH],
+            hand_type = ['left', 'right'], # [left, 'right']
+            human_type = ['health', 'amputant'], # [amputant, 'health']
+            # test_dataset_list = ['all'], # ['fedya_tropin_standart_elbow_left'],  # don't change this !
+            test_dataset_list = ['fedya_tropin_standart_elbow_left'],  # don't change this !
+            random_sampling=False,
+        )
 
     # define a config object to keep track of data variables
     data_config = creating_dataset.DataConfig(**data_paths)
 
     train_paths, val_paths = creating_dataset.get_train_val_pathes(data_config)
-
+    print(f"Found {len(train_paths)} training and {len(val_paths)} test sessions in the dataset.")
 
     train_config = replace(data_config, samples_per_epoch=int(data_config.samples_per_epoch / len(train_paths)))               
     val_config = replace(data_config, random_sampling=False, samples_per_epoch=None)
@@ -88,7 +123,7 @@ def load_data_into_omen_dataset(n_sessions:int=-1, downsample_movements_factor:i
     omen_ds_test =  Dataset('hand', '', -1, dt, 1, variables, [])
 
     for omen_ds, paths in zip((omen_ds_train, omen_ds_test), (train_paths, val_paths)):
-        for i, path in enumerate(paths):
+        for i, path in track(enumerate(paths), description="Loading data", total=len(paths)):
             if n_sessions  > 0 and i >= n_sessions:
                 break
             name = path.parent.parent.name
@@ -96,19 +131,28 @@ def load_data_into_omen_dataset(n_sessions:int=-1, downsample_movements_factor:i
             sess = ds_to_session(name, ds, omen_ds, train_config, dt, variables, downsample_movements_factor)
             logger.debug(f"Added session {name} with {sess.n_train_trials} trials and {sess.X_train.shape[0]} samples ({sess.X_train.shape[0]/25:.2f} seconds)")
             
-        if collate_sessions:
-            logger.debug(f"Collating {len(omen_ds.sessions)} sessions into a single session")
-            master_session = omen_ds.sessions[0]
-            for k, sess in enumerate(omen_ds.sessions):
-                if i == 0:
-                    continue
+
+    print('Collecting all data in a single session')
+    master_session = DatasetSession(
+        'master_session', omen_ds_train.name, omen_ds_train.delta_t, 
+        omen_ds_train.variables, [], [], []
+    )
+    for tset, ds in zip(('train', 'test'), (omen_ds_train, omen_ds_test)):
+        for sess in ds.sessions:
+            if tset == 'train':
                 master_session.train_trials.extend(sess.train_trials)
-                master_session.test_trials.extend(sess.test_trials)
-                master_session.validation_trials.extend(sess.validation_trials)
+            else:
+                master_session.test_trials.extend(sess.train_trials)
 
-            omen_ds.sessions = [master_session]
-            # print(master_session.describe())
 
-    print(f"Training dataset has: {len(omen_ds_train.sessions)} sessions.")
-    print(f"Test dataset has: {len(omen_ds_test.sessions)} sessions.")
-    return omen_ds_train, omen_ds_test
+    omen_ds_train.sessions = [master_session]
+    print(f"Master session has {master_session.n_train_trials} train and {master_session.n_test_trials} test trials")
+
+    # we need to cleanup the trials times
+    for tset in ('train', 'test'):
+        t = 0
+        for trial in master_session.get_trials_subset(tset):
+            trial.time = (trial.time - trial.time[0]) + t
+            t = trial.time[-1]
+
+    return omen_ds_train, master_session

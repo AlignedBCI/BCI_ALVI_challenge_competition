@@ -1,6 +1,8 @@
 import sys
 from loguru import logger
+from rich.traceback import install
 
+install(show_locals=False)
 logger.remove()
 logger.add(sys.stderr, level=1);
 logger.add(sys.stdout, level=1);

@@ -1,6 +1,8 @@
 models/*
 dataset_v2_blocks/*
 
+*.log
+*.err
 *.png
 *.gif
 *.mp4

@@ -3,9 +3,11 @@ import numpy as np
 from natsort import natsorted
 from pathlib import Path
 from dataclasses import dataclass, replace
+from loguru import logger
 from typing import List
-from .data_utils import VRHandMYODataset, adjust_delay_in_exp_data
 from simple_parsing.helpers import Serializable
+
+from .data_utils import VRHandMYODataset, adjust_delay_in_exp_data
 
 LEFT_TO_RIGHT_HAND = [6, 5, 4, 3, 2, 1, 0, 7]
 
@@ -93,11 +95,11 @@ def init_dataset(config: DataConfig, data_folder: Path, transform = None):
     # Loop over files in data dir
     all_paths = sorted(data_folder.glob('*.npz'))
     all_paths = natsorted(all_paths)
-    print(f'Number of moves: {len(all_paths)} | Dataset: {data_folder.parents[1].name}')
+    logger.debug(f'Number of moves: {len(all_paths)} | Dataset: {data_folder.parents[1].name}')
 
     exps_data = [dict(np.load(d, allow_pickle=True)) for d in all_paths]
 
-    # temporal alighnment
+    # temporal alignment
     n_crop_idxs = int(config.delay_ms/1000*config.original_fps)
     exps_data = [adjust_delay_in_exp_data(data, n_crop_idxs) for data in exps_data]
 
@@ -106,7 +108,7 @@ def init_dataset(config: DataConfig, data_folder: Path, transform = None):
     if is_left_hand:
         for i, data in enumerate(exps_data):
             exps_data[i]['data_myo'] = exps_data[i]['data_myo'][:, LEFT_TO_RIGHT_HAND]
-        print('Reorder this dataset', data_folder.parents[1].name, is_left_hand)
+        logger.debug('Reorder this dataset', data_folder.parents[1].name, is_left_hand)
 
     dataset = VRHandMYODataset(exps_data,
                             window_size=config.window_size,
