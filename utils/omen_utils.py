@@ -12,9 +12,11 @@ from . import creating_dataset
 from .creating_dataset import LEFT_TO_RIGHT_HAND
 
 from abcidatasets import Dataset, DatasetVariable, DatasetSession
+from abcidatasets.session import DatasetTrial
 from abcidatasets.dataset.utils import make_acausal_kernel
 
 DATA_PATH = "./dataset_v2_blocks"
+LEFT_TO_RIGHT_HAND = [6, 5, 4, 3, 2, 1, 0, 7]
 n_inputs, n_outputs = 8, 20
 
 
@@ -25,45 +27,6 @@ def smooth(x, kernel_size=5):
         x[i] = np.convolve(np.abs(x[i]), kernel, mode='same')
     return x
     
-
-def emg_amplitude(x):
-    return smooth(np.abs(x))
-
-def reshape_and_average(x, n):
-    """
-        x is emg data of shape n_inputs x T. 
-        The function should return an array of shape n_inputs x T//N
-        where each value is the average of the corresponding N values in x
-    """
-    return x[:, ::n]
-    
-
-def ds_to_session(name, myo_session_data, omen_ds, train_config, dt, variables, downsample_movements_factor):
-    logger.debug(f"Creating session {name} - {len(myo_session_data)} movements")
-    movements = [xy for xy in myo_session_data][::downsample_movements_factor]
-    Xs = np.concatenate([
-        reshape_and_average(emg_amplitude(x), train_config.down_sample_target) 
-        for x, _ in movements
-    ], axis=1)
-    Ys = np.hstack([y for _, y in movements])
-
-
-    data = {}
-    for i in range(n_inputs):
-        data[f"myo_{i}"] = Xs[i]
-    for i in range(n_outputs):
-        data[f"target_{i}"] = Ys[i]
-    data = pd.DataFrame(data)
-    data.reset_index(drop=True, inplace=True)
-    data['time'] = np.arange(data.shape[0]) * dt
-
-
-    sess = omen_ds.session_from_df(
-        data, 'hand', name, variables, dt, unit_prefix='myo_', trial_duration_seconds=5
-    )
-    sess.train_trials = sess.all_trials  # we're only using the training set to create the session so this is ok
-    omen_ds.sessions.append(sess)
-    return sess
 
 def load_submission_dataset():
     test_data_name = 'fedya_tropin_standart_elbow_left'  # shoould match `test_dataset_list` used to train the model
@@ -83,81 +46,109 @@ def load_submission_dataset():
 
 
 
+def emg_amplitude(x):
+    return smooth(np.abs(x))
+
+def reshape_and_average(x, n):
+    """
+        x is emg data of shape n_inputs x T. 
+        The function should return an array of shape n_inputs x T//N
+        where each value is the average of the corresponding N values in x
+    """
+    return x[:, ::n]
+    
+
+
+
+def numpy_fles_to_trials(path, downsample_target_factor, dt, t):
+    files = natsorted(path.glob('*.npz'))
+    is_left_hand = 'left' in str(path)
+
+    trials = []
+    for f in files:
+        data = dict(np.load(f, allow_pickle=True))
+        myo = data['data_myo'][::downsample_target_factor, :]
+
+        if is_left_hand:
+            myo = myo[:, LEFT_TO_RIGHT_HAND]    
+
+        time = np.linspace(0, myo.shape[0] / dt, myo.shape[0]) * 1000 + t 
+        t = time[-1]
+
+        trials.append(
+            DatasetTrial(
+                myo,
+                data['data_angles'][::downsample_target_factor, :],
+                time,
+            )
+        )
+
+    return trials, t
+    
+
+def collect_paths(load_test_only):
+    master = Path('/om2/user/claudif/DecodingAlgorithms/BCI_ALVI_challenge_competition/dataset_v2_blocks/dataset_v2_blocks')
+    assert master.exists(), f"Data path {master} does not exist"
+    subs = [
+        master / 'amputant' / 'left',
+        master / 'health' / 'left',
+        master / 'health' / 'right',
+    ]
+
+    train_paths = []
+    test_paths = []
+    for s in subs:
+        assert s.exists(), f"Data path {s} does not exist"
+        subfolders = [(x/'preproc_angles') for x in s.iterdir() if x.is_dir()]
+        for subfld in subfolders:
+            assert  subfld.exists(), f"Data path {subfld} does not exist"
+            train = subfld / 'train'
+            test = subfld / 'test'
+
+            if train.exists():
+                if load_test_only and 'fedya_tropin_standart_elbow_left' in str(train):
+                    continue
+                train_paths.append(train)
+            if test.exists():
+                if 'fedya_tropin_standart_elbow_left' in str(test):
+                    test_paths.append(test)
+                else:
+                    train_paths.append(test)
+
+    print(f"Found {len(train_paths)} training and {len(test_paths)} test file paths in the dataset.")
+    return train_paths, test_paths
+                
+    
+
 def load_data_into_omen_dataset(
         n_sessions:int=-1,
         downsample_movements_factor:int=1,
         load_test_only=False,
-        group_sessions=True,
         downsample_target_factor=1,
         ):
 
-    if load_test_only:
-        data_paths = dict(
-            datasets=[DATA_PATH],
-            hand_type = ['left', 'right'], # [left, 'right']
-            human_type = ['amputant'], # [amputant, 'health']
-            test_dataset_list = ['fedya_tropin_standart_elbow_left'],  # don't change this !
-            random_sampling=False,
-        )
-    else:
-        data_paths = dict(
-            datasets=[DATA_PATH],
-            hand_type = ['left', 'right'], # [left, 'right']
-            human_type = ['health', 'amputant'], # [amputant, 'health']
-            # test_dataset_list = ['all'], 
-            test_dataset_list = ['fedya_tropin_standart_elbow_left'],  # don't change this !
-            random_sampling=False,
-        )
+    train_paths, test_paths = collect_paths(load_test_only)
+    print(f"Found {len(train_paths)} training and {len(test_paths)} test sessions in the dataset.")
 
-    # define a config object to keep track of data variables
-    data_config = creating_dataset.DataConfig(**data_paths, down_sample_target=downsample_target_factor)
-
-    train_paths, val_paths = creating_dataset.get_train_val_pathes(data_config)
-    if load_test_only:
-        train_paths = [dp for dp in train_paths if 'fedya' in str(dp)]
-    print(f"Found {len(train_paths)} training and {len(val_paths)} test sessions in the dataset.")
-
-    dt = int(1000/200) * data_config.down_sample_target
+    dt = int(1000/200) * downsample_target_factor
     variables = [DatasetVariable(f'target_{i}', 'hand', False) for i in range(n_outputs)]
-    omen_ds_train =  Dataset('hand', '', -1, dt, 1, variables, [])
-    omen_ds_test =  Dataset('hand', '', -1, dt, 1, variables, [])
+    omen_ds =  Dataset('hand', '', -1, dt, 1, variables, [])
+    session = DatasetSession('session', omen_ds.name, dt, variables, [], [], [])
 
-    for dst, omen_ds, paths in zip(('train', 'test'),(omen_ds_train, omen_ds_test), (train_paths, val_paths)):
-        for i, path in track(enumerate(paths), description="Loading data", total=len(paths)):
-            if n_sessions  > 0 and i >= n_sessions:
-                break
-            name = path.parent.parent.name + f"_{dst}"
-            ds = init_dataset(data_config, path)
-            sess = ds_to_session(name, ds, omen_ds, data_config, dt, variables, downsample_movements_factor)
-            logger.debug(f"Added session {name} with {sess.n_train_trials} trials and {sess.X_train.shape[0]} samples ({sess.X_train.shape[0]/25:.2f} seconds)")
-            
-    if group_sessions:
-        print(f'Collecting all data in a single session. {len(omen_ds_train.sessions)} train sessions and {len(omen_ds_test.sessions)} test sessions')
-        master_session = DatasetSession(
-            'master_session', omen_ds_train.name, omen_ds_train.delta_t, 
-            omen_ds_train.variables, [], [], []
-        )
-        for tset, ds in zip(('train', 'test'), (omen_ds_train, omen_ds_test)):
-            for sess in ds.sessions:
-                if tset == 'train':
-                    master_session.train_trials.extend(sess.train_trials)
-                else:
-                    n = len(sess.train_trials) // 2
-                    master_session.train_trials.extend(sess.train_trials[:n])
-                    master_session.test_trials.extend(sess.train_trials[-n:])
+    t = 0
+    for i, path in enumerate(train_paths):
+        if n_sessions > 0 and i >= n_sessions:
+            break
+        trials, t = numpy_fles_to_trials(path, downsample_target_factor, dt, t)
+        session.train_trials.extend(trials)
 
+    for i, path in enumerate(test_paths):
+        if n_sessions > 0 and i >= n_sessions:
+            break
+        trials, t = numpy_fles_to_trials(path, downsample_target_factor, dt, t)
+        session.test_trials.extend(trials)
 
-        omen_ds_train.sessions = [master_session]
-        print(f"Master session has {master_session.n_train_trials} train and {master_session.n_test_trials} test trials")
+    print(f"Amount of data: {len(session.train_trials)} train and {len(session.test_trials)} test trials")
 
-        # we need to cleanup the trials times
-        for tset in ('train', 'test'):
-            t = 0
-            for trial in master_session.get_trials_subset(tset):
-                trial.time = (trial.time - trial.time[0]) + t
-                t = trial.time[-1]
-    else:
-        master_session = None
-        omen_ds_train.sessions.extend(omen_ds_test.sessions)
-
-    return omen_ds_train, master_session
+    omen_ds.sessions.append(session)
+    return omen_ds, session

@@ -3,7 +3,7 @@
 #SBATCH -N 1                         # one node
 #SBATCH -n 48                         # CPU (hyperthreaded) cores
 #SBATCH -J myo_sweep   # job name
-#SBATCH --mem=48GB                   # memory per node in GB
+#SBATCH --mem=96GB                   # memory per node in GB
 #SBATCH -o myo_sweep.log
 #SBATCH -e myo_sweep.err
 #SBATCH --gres=gpu:4

@@ -16,7 +16,7 @@ logger.add(sys.stdout, level=1);
 
 from utils.omen_utils import load_data_into_omen_dataset, load_submission_dataset, reshape_and_average, emg_amplitude
 from omen import OMEN
-from omen.train.base_trainer import BaseTrainer
+from omen.augmentations import WaveletNoiseInjection, MagnitudeWarping
 
 KAGGLE_BEST = 0.11711
 test_session_name = 'fedya_tropin_standart_elbow_left_test'
@@ -26,13 +26,12 @@ test_session_name = 'fedya_tropin_standart_elbow_left_test'
 # ---------------------------------------------------------------------------- #
 print('\n\n')
 downsample_target_factor = 8
-n_sessions = 22
+n_sessions = 8
 
 omen_ds, session = load_data_into_omen_dataset(
     n_sessions, 
     downsample_movements_factor=-1, 
     downsample_target_factor=downsample_target_factor,
-    group_sessions=True,
     load_test_only=False
 )
 
@@ -57,7 +56,7 @@ Train:  0.0947
 Test:   0.1150
 
 When trained with 8 train sesssions
-GT:     0.1264  --- +7.94%
+GT:     0.1171  --- +4.2%
 Train:
 Test:
 
@@ -68,7 +67,6 @@ Test:   0.1084
 
 """
 
-
 omen_config = {'n_hidden': 512, 'n_layers': -1, 'embedding_dim': 32, 'activation': 'relu', 
                 'input_sigma': 0.25, 'kernel_size': 11, 'head_n_layers': 2, 'lr': 0.0005, 'n_epochs': 5000, 
                 'beta': .5, 'sigma': 0.5, 'n_kernels': 4, 'patience': 50,
@@ -76,7 +74,7 @@ omen_config = {'n_hidden': 512, 'n_layers': -1, 'embedding_dim': 32, 'activation
 
 # omen_config = {'n_hidden': 512, 'n_layers': -1, 'embedding_dim': 32, 'activation': 'relu', 
 #                 'input_sigma': 0.25, 'kernel_size': 11, 'head_n_layers': 2, 'lr': 0.0005, 'n_epochs': 5000, 
-#                 'beta': 0.5,
+#                 'beta': 25.0,
 #                 'sigma': 1.0, # ! changed
 #                 'n_kernels': 4, 'patience': 50,
 # }
@@ -91,7 +89,7 @@ omen = OMEN.from_config(omen_config)
 # ---------------------------------------------------------------------------- #
 print("Fitting OMEN")
 omen.fit_session(
-    session, plot_history=False, verbose=True, should_refine=False
+    session, plot_history=False, verbose=True, should_refine=False, augmentations=[WaveletNoiseInjection(), MagnitudeWarping()]
 )
 # omen.fit_sessions(omen_ds.sessions, plot_history=False, verbose=True, should_refine=False)
 
@@ -136,7 +134,7 @@ for i in range(5):
     ax[i].plot(Yhat[:, i], color='red', alpha=.5)
     ax[i].set(xlim=[0, 12000])
 
-plt.savefig(f'omen_GT_preds.png')
+plt.savefig(f'omen_GT_preds_{n_sessions}.png')
 err = mean_squared_error(sub_Y.values, Yhat)
 color = 'green' if err < KAGGLE_BEST else 'red'
 change = (err - KAGGLE_BEST) / KAGGLE_BEST * 100
@@ -160,7 +158,7 @@ for tset in ('train', 'test',):
 # ---------------------------------------------------------------------------- #
 #                                     PLOT                                     #
 # ---------------------------------------------------------------------------- #
-n_trials_to_plot=10
+n_trials_to_plot=25
 n_ch_to_plot=8
 
 print("Final plot")
