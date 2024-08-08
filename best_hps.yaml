@@ -1,12 +1,12 @@
-activation: leaky_relu
-beta: 8.0
-embedding_dim: 128
+activation: relu
+beta: 0.5
+embedding_dim: 32
 head_n_layers: 1
 input_sigma: 0.1
 kernel_size: 11
 lr: 0.01
 n_epochs: 2500
-n_hidden: 256
+n_hidden: 128
 n_kernels: 4
 n_layers: 1
-sigma: 0.3
+sigma: 0.4

@@ -13,7 +13,7 @@ from utils.omen_utils import load_data_into_omen_dataset
 import omen
 omen.hyperparameters.sweep.N_ITERATIONS = 2
 
-from omen.hyperparameters.sweep import Sweeper
+from omen.hyperparameters.sweep import Sweeper, seeds_checker
 
 
 # ---------------------------------------------------------------------------- #
@@ -21,11 +21,12 @@ from omen.hyperparameters.sweep import Sweeper
 # ---------------------------------------------------------------------------- #
 
 print('\n\n')
-N_sessions = 10
+N_sessions = 22
 omen_ds, _ = load_data_into_omen_dataset(
         N_sessions, 
-        downsample_movements_factor=4, 
-        load_test_only=False
+        downsample_movements_factor=-1, 
+        downsample_target_factor=8, 
+        load_test_only=False,
 )
 
 
@@ -35,19 +36,27 @@ omen_ds, _ = load_data_into_omen_dataset(
 
 space = {
         "n_hidden": tune.choice([32, 64, 128, 256, 512]),
-        "n_layers": tune.choice([-1, 0, 1, 2,]),
+        "n_layers": tune.choice([-1, 0, 1, 2, 4, 6]),
         "embedding_dim": tune.choice([32, 64, 128]),
         "activation": tune.choice(["relu", "tanh", "leaky_relu"]),
         "input_sigma": tune.choice([0.1, 0.25,]),
-        "kernel_size": tune.choice([1, 5, 11,]),
+        "kernel_size": tune.choice([1, 5, 11, 25]),
         "head_n_layers": tune.choice([-1, 1, 2]),
         "lr": tune.choice([1e-4, 1e-3, 1e-2]),
-        "n_epochs": tune.choice([500, 1500, 2500, 5000, 10_000]),
-        "beta": tune.choice([0.5, 2.5, 5.0, 8.0]),
+        "n_epochs": tune.choice([500, 1500, 2500, 5000,]),
+        "beta": tune.choice([0.5, 2.5, 5.0, 8.0, 25, 50]),
         "sigma": tune.choice([0.2, 0.3, 0.4, 0.5, 0.6]),
-        "n_kernels": tune.choice([1, 2, 4]),
+        "n_kernels": tune.choice([1, 2, 4, 12]),
+        "patience": tune.choice([10, 25, 250, 500,]),
+        "encoder_type": tune.choice(['tCNN', 'MLP', 'Linear', 'Null']),
 }
 
+
+SEEDS = [
+]
+
+
+seeds_checker(SEEDS, [], space, {})
 
 sweeper = Sweeper(
             'OMEN',
@@ -58,12 +67,12 @@ sweeper = Sweeper(
             num_gpus=4,  # 6
             n_sessions=N_sessions,
             verbose=True,
-            num_gpus_per_job=1.0,
+            num_gpus_per_job=1,
             num_cpus_per_job=12,
             multi_session=False,
             space=space,
-            seeds=[],
-        #     n_samples=4,
+            seeds=SEEDS,
+            n_samples=100,
         )
 best_hps = sweeper.sweep()
 

@@ -6,8 +6,8 @@
 #SBATCH --mem=48GB                   # memory per node in GB
 #SBATCH -o myo_sweep.log
 #SBATCH -e myo_sweep.err
-#SBATCH --gres=gpu:4 --constraint=8GB
-#SBATCH --constraint=any-gpu         
+#SBATCH --gres=gpu:4
+#SBATCH --constraint=10GB      
 #SBATCH --mail-type=END
 #SBATCH --mail-user="federicoclaudi@protonmail.com"
 
